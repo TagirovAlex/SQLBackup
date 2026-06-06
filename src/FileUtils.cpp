@@ -112,7 +112,7 @@ static DWORD WINAPI writerThread(LPVOID param) {
         if (idx == -1) {
             DWORD s0 = ctx->sizes[0];
             DWORD s1 = ctx->sizes[1];
-            if (s0 == 0 && s1 == 0) break;
+            if ((s0 == 0 || s0 == (DWORD)-1) && (s1 == 0 || s1 == (DWORD)-1)) break;
             continue;
         }
 
@@ -176,7 +176,7 @@ CopyResult FileUtils::copyWithHash(const std::string& src, const std::string& de
     ctx.buffers[1] = buffers[1];
     ctx.sizes[0] = 0;
     ctx.sizes[1] = 0;
-    ctx.hReady = CreateEventA(nullptr, FALSE, FALSE, nullptr);
+    ctx.hReady = CreateSemaphoreA(nullptr, 0, 10, nullptr);
     ctx.hFree[0] = CreateEventA(nullptr, FALSE, TRUE, nullptr);
     ctx.hFree[1] = CreateEventA(nullptr, FALSE, TRUE, nullptr);
     ctx.error = false;
@@ -211,7 +211,7 @@ CopyResult FileUtils::copyWithHash(const std::string& src, const std::string& de
 
         CryptHashData(hHash, reinterpret_cast<BYTE*>(buffers[cur]), bytesRead, 0);
         ctx.sizes[cur] = bytesRead;
-        SetEvent(ctx.hReady);
+        ReleaseSemaphore(ctx.hReady, 1, nullptr);
 
         cur ^= 1;
 
@@ -226,10 +226,10 @@ CopyResult FileUtils::copyWithHash(const std::string& src, const std::string& de
     if (!success || ctx.error) {
         ctx.sizes[0] = 0;
         ctx.sizes[1] = 0;
-        SetEvent(ctx.hReady);
+        ReleaseSemaphore(ctx.hReady, 1, nullptr);
     } else {
         ctx.sizes[cur] = 0;
-        SetEvent(ctx.hReady);
+        ReleaseSemaphore(ctx.hReady, 1, nullptr);
     }
 
     WaitForSingleObject(hThread, INFINITE);
