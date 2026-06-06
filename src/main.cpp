@@ -83,6 +83,7 @@ static std::string readAndFillTemplate(
     replaceAll(content, "{COPYDATE}", dateStr.str());
     replaceAll(content, "{COPYDURATION}", formatDuration(copyDurationSec));
     replaceAll(content, "{STATUSJOB}", statusJob);
+    replaceAll(content, "{STATUSCLASS}", statusJob == "Ошибка" ? "error" : "success");
 
     return content;
 }
@@ -150,80 +151,92 @@ int main(int argc, char* argv[]) {
         std::string label = section.empty() ? "General" : section;
         logger.info("--- Processing section: " + label + " ---");
 
+        bool sectionOk = true;
+        std::string newFileName;
+        std::string renamedPath;
+        std::string actualDest;
+        std::string destPath;
+        uint64_t fileSize = 0;
+        double copyDurationSec = 0;
+
         std::string srcPath = config.sourcePath(section);
         if (srcPath.empty()) {
             logger.error("SourcePath not configured in: " + label);
-            failCount++;
-            continue;
+            sectionOk = false;
         }
 
-        auto backupFile = FileUtils::findNewestFile(srcPath, config.fileExtension(section));
-        if (!backupFile.has_value()) {
-            logger.error("No backup files found in: " + srcPath);
-            failCount++;
-            continue;
-        }
-
-        logger.info("Found backup file: " + backupFile->fileName);
-
-        std::string newFileName = FileUtils::generateFileName(config.nameTemplate(section), config.dateFormat(section));
-        std::string ext = fs::path(backupFile->fileName).extension().string();
-        newFileName += ext;
-
-        logger.info("Renaming to: " + newFileName);
-
-        auto renamedPath = FileUtils::renameFile(backupFile->fullPath, newFileName);
-        if (!renamedPath.has_value()) {
-            logger.error("Failed to rename file to: " + newFileName);
-            failCount++;
-            continue;
-        }
-
-        logger.info("File renamed to: " + renamedPath.value());
-
-        std::string destPath = (fs::path(config.destPath(section)) / newFileName).string();
-        auto onExists = static_cast<OnExists>(config.onExists());
-        logger.info("Copying to: " + destPath + " (with inline SHA-256)");
-
-        auto copyStart = std::chrono::steady_clock::now();
-        auto copyResult = FileUtils::copyWithHash(renamedPath.value(), destPath, onExists);
-        if (copyResult.skipped) {
-            logger.warn("Destination file already exists, skipped for: " + copyResult.destPath);
-            successCount++;
-            continue;
-        }
-        if (!copyResult.success) {
-            logger.error("Failed to copy file to: " + copyResult.destPath);
-            failCount++;
-            continue;
-        }
-
-        std::string actualDest = copyResult.destPath;
-        logger.info("File copied successfully. Verifying destination...");
-
-        auto destHash = FileUtils::computeSha256(actualDest);
-        if (destHash != copyResult.sourceHash) {
-            logger.error("Verification failed: SHA-256 mismatch");
-            logger.error("  Source hash: " + copyResult.sourceHash);
-            logger.error("  Dest   hash: " + destHash);
-            failCount++;
-            continue;
-        }
-
-        auto copyEnd = std::chrono::steady_clock::now();
-        double copyDurationSec = std::chrono::duration<double>(copyEnd - copyStart).count();
-        logger.info("Verification passed. Source SHA-256: " + copyResult.sourceHash);
-
-        if (config.debug()) {
-            logger.info("Debug mode: source file will NOT be deleted: " + renamedPath.value());
-        } else {
-            logger.info("Removing source file...");
-            if (!FileUtils::deleteFile(renamedPath.value())) {
-                logger.warn("Failed to remove source file: " + renamedPath.value());
-            } else {
-                logger.info("Source file removed: " + renamedPath.value());
+        std::optional<BackupFile> backupFile;
+        if (sectionOk) {
+            backupFile = FileUtils::findNewestFile(srcPath, config.fileExtension(section));
+            if (!backupFile.has_value()) {
+                logger.error("No backup files found in: " + srcPath);
+                sectionOk = false;
             }
         }
+
+        if (sectionOk) {
+            logger.info("Found backup file: " + backupFile->fileName);
+            fileSize = backupFile->fileSize;
+
+            newFileName = FileUtils::generateFileName(config.nameTemplate(section), config.dateFormat(section));
+            newFileName += fs::path(backupFile->fileName).extension().string();
+
+            logger.info("Renaming to: " + newFileName);
+
+            auto renamed = FileUtils::renameFile(backupFile->fullPath, newFileName);
+            if (!renamed.has_value()) {
+                logger.error("Failed to rename file to: " + newFileName);
+                sectionOk = false;
+            } else {
+                renamedPath = renamed.value();
+                logger.info("File renamed to: " + renamedPath);
+            }
+        }
+
+        if (sectionOk) {
+            destPath = (fs::path(config.destPath(section)) / newFileName).string();
+            auto onExists = static_cast<OnExists>(config.onExists());
+            logger.info("Copying to: " + destPath + " (with inline SHA-256)");
+
+            auto copyStart = std::chrono::steady_clock::now();
+            auto copyResult = FileUtils::copyWithHash(renamedPath, destPath, onExists);
+
+            if (copyResult.skipped) {
+                logger.warn("Destination file already exists, skipped for: " + copyResult.destPath);
+                actualDest = copyResult.destPath;
+            } else if (!copyResult.success) {
+                logger.error("Failed to copy file to: " + copyResult.destPath);
+                sectionOk = false;
+            } else {
+                actualDest = copyResult.destPath;
+                logger.info("File copied successfully. Verifying destination...");
+
+                auto destHash = FileUtils::computeSha256(actualDest);
+                if (destHash != copyResult.sourceHash) {
+                    logger.error("Verification failed: SHA-256 mismatch");
+                    logger.error("  Source hash: " + copyResult.sourceHash);
+                    logger.error("  Dest   hash: " + destHash);
+                    sectionOk = false;
+                } else {
+                    copyDurationSec = std::chrono::duration<double>(std::chrono::steady_clock::now() - copyStart).count();
+                    logger.info("Verification passed. Source SHA-256: " + copyResult.sourceHash);
+
+                    if (config.debug()) {
+                        logger.info("Debug mode: source file will NOT be deleted: " + renamedPath);
+                    } else {
+                        logger.info("Removing source file...");
+                        if (!FileUtils::deleteFile(renamedPath)) {
+                            logger.warn("Failed to remove source file: " + renamedPath);
+                        } else {
+                            logger.info("Source file removed: " + renamedPath);
+                        }
+                    }
+                }
+            }
+        }
+
+        std::string sourceForMail = renamedPath.empty() ? (backupFile ? backupFile->fullPath : "") : renamedPath;
+        std::string statusJob = sectionOk ? "Успешно" : "Ошибка";
 
         auto recipients = config.recipients();
         if (!recipients.empty() && !config.mailServer().empty()) {
@@ -234,59 +247,53 @@ int main(int argc, char* argv[]) {
                 tmplPath = (fs::path(getExecutableDir()) / tmplPath).string();
 
             std::string htmlBody = readAndFillTemplate(
-                tmplPath, newFileName, renamedPath.value(),
-                actualDest, backupFile->fileSize, label, copyDurationSec, "Успешно"
+                tmplPath, newFileName, sourceForMail,
+                actualDest.empty() ? destPath : actualDest,
+                fileSize, label, copyDurationSec, statusJob
             );
 
+            Mailer mailer;
+            bool mailOk = true;
             if (htmlBody.empty()) {
                 logger.error("Failed to read mail template: " + tmplPath);
-                failCount++;
-                continue;
-            }
-
-            Mailer mailer;
-            if (!mailer.connect(config.mailServer(), config.mailPort())) {
+                mailOk = false;
+            } else if (!mailer.connect(config.mailServer(), config.mailPort())) {
                 logger.error("Failed to connect to mail server: " + config.mailServer());
-                failCount++;
-                continue;
-            }
+                mailOk = false;
+            } else {
+                std::string subject = config.mailSubject();
+                replaceAll(subject, "{LABEL}", label);
+                replaceAll(subject, "{FILENAME}", newFileName);
+                replaceAll(subject, "{FILESIZE}", formatFileSize(fileSize));
+                replaceAll(subject, "{COPYDATE}", []() {
+                    auto now = std::time(nullptr);
+                    auto tm = *std::localtime(&now);
+                    std::ostringstream ss;
+                    ss << std::put_time(&tm, "%d.%m.%Y %H:%M:%S");
+                    return ss.str();
+                }());
+                replaceAll(subject, "{COPYDURATION}", formatDuration(copyDurationSec));
+                replaceAll(subject, "{STATUSJOB}", statusJob);
 
-            std::string subject = config.mailSubject();
-            replaceAll(subject, "{LABEL}", label);
-            replaceAll(subject, "{FILENAME}", newFileName);
-            replaceAll(subject, "{FILESIZE}", formatFileSize(backupFile->fileSize));
-            replaceAll(subject, "{COPYDATE}", []() {
-                auto now = std::time(nullptr);
-                auto tm = *std::localtime(&now);
-                std::ostringstream ss;
-                ss << std::put_time(&tm, "%d.%m.%Y %H:%M:%S");
-                return ss.str();
-            }());
-            replaceAll(subject, "{COPYDURATION}", formatDuration(copyDurationSec));
-            replaceAll(subject, "{STATUSJOB}", "Успешно");
-            if (!mailer.sendMail(
-                config.senderName(),
-                config.senderEmail(),
-                recipients,
-                subject,
-                htmlBody,
-                config.mailAuth(),
-                config.mailUsername(),
-                config.mailPassword()
-            )) {
-                logger.error("Failed to send email notification");
-                failCount++;
+                if (!mailer.sendMail(
+                    config.senderName(), config.senderEmail(), recipients,
+                    subject, htmlBody, config.mailAuth(),
+                    config.mailUsername(), config.mailPassword()
+                )) {
+                    logger.error("Failed to send email notification");
+                    mailOk = false;
+                }
                 mailer.disconnect();
-                continue;
             }
 
-            mailer.disconnect();
-            logger.info("Email notification sent successfully");
+            if (mailOk)
+                logger.info("Email notification sent successfully");
         } else {
             logger.info("Email notification skipped (no recipients or mail server configured)");
         }
 
-        successCount++;
+        if (sectionOk) successCount++;
+        else failCount++;
     }
 
     logger.cleanupOldLogs();
