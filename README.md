@@ -124,8 +124,9 @@ SQLBackup.exe --help
 | `{STATUSJOB}` | Статус выполнения (`Успешно` / `Ошибка`) |
 | `{STATUSCLASS}` | CSS-класс для статуса (`success` / `error`) |
 | `{SERVERNAME}` | Имя сервера (из `ServerName` в конфиге или FQDN) |
+| `{ERRORMESSAGE}` | Текст ошибки (пусто при успехе) |
 
-Переменные `{LABEL}`, `{FILENAME}`, `{FILESIZE}`, `{COPYDATE}`, `{COPYDURATION}`, `{STATUSJOB}`, `{SERVERNAME}` также поддерживаются в теме письма (`Subject`).
+Переменные `{LABEL}`, `{FILENAME}`, `{FILESIZE}`, `{COPYDATE}`, `{COPYDURATION}`, `{STATUSJOB}`, `{SERVERNAME}`, `{ERRORMESSAGE}` также поддерживаются в теме письма (`Subject`).
 
 ## Логирование
 

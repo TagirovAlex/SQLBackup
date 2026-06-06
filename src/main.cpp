@@ -57,7 +57,8 @@ static std::string readAndFillTemplate(
     const std::string& label,
     double copyDurationSec,
     const std::string& statusJob,
-    const std::string& serverName
+    const std::string& serverName,
+    const std::string& errorMessage = ""
 ) {
     std::ifstream file(templatePath);
     if (!file.is_open()) return {};
@@ -86,6 +87,7 @@ static std::string readAndFillTemplate(
     replaceAll(content, "{STATUSJOB}", statusJob);
     replaceAll(content, "{STATUSCLASS}", statusJob == "Ошибка" ? "error" : "success");
     replaceAll(content, "{SERVERNAME}", serverName);
+    replaceAll(content, "{ERRORMESSAGE}", errorMessage);
 
     return content;
 }
@@ -154,6 +156,7 @@ int main(int argc, char* argv[]) {
         logger.info("--- Processing section: " + label + " ---");
 
         bool sectionOk = true;
+        std::string errorMessage;
         std::string newFileName;
         std::string renamedPath;
         std::string actualDest;
@@ -163,7 +166,8 @@ int main(int argc, char* argv[]) {
 
         std::string srcPath = config.sourcePath(section);
         if (srcPath.empty()) {
-            logger.error("SourcePath not configured in: " + label);
+            errorMessage = "Не указан путь к исходной папке (SourcePath)";
+            logger.error(errorMessage);
             sectionOk = false;
         }
 
@@ -171,7 +175,8 @@ int main(int argc, char* argv[]) {
         if (sectionOk) {
             backupFile = FileUtils::findNewestFile(srcPath, config.fileExtension(section));
             if (!backupFile.has_value()) {
-                logger.error("No backup files found in: " + srcPath);
+                errorMessage = "Не найден файл резервной копии в папке: " + srcPath;
+                logger.error(errorMessage);
                 sectionOk = false;
             }
         }
@@ -187,7 +192,8 @@ int main(int argc, char* argv[]) {
 
             auto renamed = FileUtils::renameFile(backupFile->fullPath, newFileName);
             if (!renamed.has_value()) {
-                logger.error("Failed to rename file to: " + newFileName);
+                errorMessage = "Не удалось переименовать файл — файл с именем \"" + newFileName + "\" уже существует";
+                logger.error(errorMessage);
                 sectionOk = false;
             } else {
                 renamedPath = renamed.value();
@@ -207,6 +213,7 @@ int main(int argc, char* argv[]) {
                 logger.warn("Destination file already exists, skipped for: " + copyResult.destPath);
                 actualDest = copyResult.destPath;
             } else if (!copyResult.success) {
+                errorMessage = "Ошибка копирования — не удалось записать файл назначения (проверьте место на диске и права доступа)";
                 logger.error("Failed to copy file to: " + copyResult.destPath);
                 sectionOk = false;
             } else {
@@ -215,6 +222,7 @@ int main(int argc, char* argv[]) {
 
                 auto destHash = FileUtils::computeSha256(actualDest);
                 if (destHash != copyResult.sourceHash) {
+                    errorMessage = "Ошибка верификации — контрольная сумма SHA-256 не совпадает, файл назначения повреждён";
                     logger.error("Verification failed: SHA-256 mismatch");
                     logger.error("  Source hash: " + copyResult.sourceHash);
                     logger.error("  Dest   hash: " + destHash);
@@ -251,7 +259,7 @@ int main(int argc, char* argv[]) {
             std::string htmlBody = readAndFillTemplate(
                 tmplPath, newFileName, sourceForMail,
                 actualDest.empty() ? destPath : actualDest,
-                fileSize, label, copyDurationSec, statusJob, config.serverName()
+                fileSize, label, copyDurationSec, statusJob, config.serverName(), errorMessage
             );
 
             Mailer mailer;
@@ -277,6 +285,7 @@ int main(int argc, char* argv[]) {
                 replaceAll(subject, "{COPYDURATION}", formatDuration(copyDurationSec));
                 replaceAll(subject, "{STATUSJOB}", statusJob);
                 replaceAll(subject, "{SERVERNAME}", config.serverName());
+                replaceAll(subject, "{ERRORMESSAGE}", errorMessage);
 
                 if (!mailer.sendMail(
                     config.senderName(), config.senderEmail(), recipients,
