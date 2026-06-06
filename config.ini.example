@@ -61,7 +61,7 @@ Password =
 ; {FILESIZE}, {SOURCEPATH}, {DESTPATH}, {SOURCEURL}, {DESTURL}, {COPYDATE})
 TemplatePath = mail_template.html
 ; Тема письма — поддерживает те же переменные, что и шаблон
-; Subject = Backup Copy [{LABEL}]: {FILENAME}
+; Subject = [{STATUSJOB}] Backup Copy [{LABEL}]: {FILENAME}
 
 [Log]
 ; Путь к папке для файлов логов

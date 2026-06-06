@@ -120,8 +120,9 @@ SQLBackup.exe --help
 | `{DESTURL}` | `file:///` URL файла назначения |
 | `{COPYDATE}` | Дата и время копирования |
 | `{COPYDURATION}` | Длительность копирования |
+| `{STATUSJOB}` | Статус выполнения (`Успешно` / `Ошибка`) |
 
-Переменные `{LABEL}`, `{FILENAME}`, `{FILESIZE}`, `{COPYDATE}`, `{COPYDURATION}` также поддерживаются в теме письма (`Subject`).
+Переменные `{LABEL}`, `{FILENAME}`, `{FILESIZE}`, `{COPYDATE}`, `{COPYDURATION}`, `{STATUSJOB}` также поддерживаются в теме письма (`Subject`).
 
 ## Логирование
 
