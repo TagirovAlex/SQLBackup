@@ -3,32 +3,83 @@
 <head>
 <meta charset="utf-8">
 <style>
-body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; padding: 20px; }
-table { border-collapse: collapse; margin: 15px 0; }
-td, th { padding: 8px 12px; border: 1px solid #ddd; text-align: left; }
-th { background-color: #f5f5f5; font-weight: 600; }
+body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    color: #333;
+    padding: 20px;
+}
+.report {
+    display: inline-block;
+    min-width: 480px;
+    max-width: 800px;
+}
+h2 {
+    margin: 0 0 12px 0;
+    font-size: 18px;
+}
+.status {
+    font-size: 15px;
+    margin: 0 0 10px 0;
+}
 .success { color: #28a745; font-weight: bold; }
-.error { color: #dc3545; font-weight: bold; }
-.error-message { color: #dc3545; margin: 10px 0; padding: 8px; border: 1px solid #dc3545; border-radius: 4px; background: #fff5f5; }
+.error   { color: #dc3545; font-weight: bold; }
+.err-box {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    margin: 0 0 12px 0;
+    padding: 8px 10px;
+    border: 1px solid #dc3545;
+    border-radius: 4px;
+    background: #fff5f5;
+    font-size: 13px;
+    color: #dc3545;
+}
+.err-box:empty {
+    display: none;
+}
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+td, th {
+    padding: 7px 10px;
+    border: 1px solid #ddd;
+    text-align: left;
+    vertical-align: top;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+th {
+    background-color: #f5f5f5;
+    font-weight: 600;
+    white-space: nowrap;
+    width: 1px;
+}
 a { color: #007bff; text-decoration: none; }
 a:hover { text-decoration: underline; }
+.footer {
+    margin-top: 14px;
+    font-size: 12px;
+    color: #888;
+}
 </style>
 </head>
 <body>
+<div class="report">
 <h2>Отчёт о перемещении резервной копии</h2>
-<p class="{STATUSCLASS}">{STATUSJOB}</p>
-<p class="error-message">{ERRORMESSAGE}</p>
+<p class="status {STATUSCLASS}">{STATUSJOB}</p>
+<p class="err-box">{ERRORMESSAGE}</p>
 <table>
-<tr><th>Параметр</th><th>Значение</th></tr>
-<tr><td>Сервер</td><td>{SERVERNAME}</td></tr>
-<tr><td>Раздел</td><td><b>{LABEL}</b></td></tr>
-<tr><td>Имя файла</td><td><b>{FILENAME}</b></td></tr>
-<tr><td>Размер файла</td><td>{FILESIZE}</td></tr>
-<tr><td>Исходный путь</td><td><a href="{SOURCEURL}">{SOURCEPATH}</a></td></tr>
-<tr><td>Путь назначения</td><td><a href="{DESTURL}">{DESTPATH}</a></td></tr>
-<tr><td>Дата копирования</td><td>{COPYDATE}</td></tr>
-<tr><td>Время копирования</td><td>{COPYDURATION}</td></tr>
+<tr><th>Сервер</th><td>{SERVERNAME}</td></tr>
+<tr><th>Раздел</th><td><b>{LABEL}</b></td></tr>
+<tr><th>Имя файла</th><td><b>{FILENAME}</b></td></tr>
+<tr><th>Размер файла</th><td>{FILESIZE}</td></tr>
+<tr><th>Исходный путь</th><td><a href="{SOURCEURL}">{SOURCEPATH}</a></td></tr>
+<tr><th>Путь назначения</th><td><a href="{DESTURL}">{DESTPATH}</a></td></tr>
+<tr><th>Дата копирования</th><td>{COPYDATE}</td></tr>
+<tr><th>Время копирования</th><td>{COPYDURATION}</td></tr>
 </table>
-<p>Данное сообщение сгенерировано автоматически утилитой SQL Backup Utility</p>
+<p class="footer">Данное сообщение сгенерировано автоматически утилитой SQL Backup Utility</p>
+</div>
 </body>
 </html>
