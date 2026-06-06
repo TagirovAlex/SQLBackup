@@ -16,6 +16,7 @@ public:
     std::string dateFormat(const std::string& section = "") const;
     std::string fileExtension(const std::string& section = "") const;
     bool debug() const;
+    int onExists() const;
 
     std::string mailServer() const;
     int mailPort() const;

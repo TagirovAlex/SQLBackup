@@ -162,18 +162,25 @@ int main(int argc, char* argv[]) {
         logger.info("File renamed to: " + renamedPath.value());
 
         std::string destPath = (fs::path(config.destPath(section)) / newFileName).string();
+        auto onExists = static_cast<OnExists>(config.onExists());
         logger.info("Copying to: " + destPath + " (with inline SHA-256)");
 
-        auto copyResult = FileUtils::copyWithHash(renamedPath.value(), destPath);
+        auto copyResult = FileUtils::copyWithHash(renamedPath.value(), destPath, onExists);
+        if (copyResult.skipped) {
+            logger.warn("Destination file already exists, skipped for: " + copyResult.destPath);
+            successCount++;
+            continue;
+        }
         if (!copyResult.success) {
-            logger.error("Failed to copy file to: " + destPath);
+            logger.error("Failed to copy file to: " + copyResult.destPath);
             failCount++;
             continue;
         }
 
+        std::string actualDest = copyResult.destPath;
         logger.info("File copied successfully. Verifying destination...");
 
-        auto destHash = FileUtils::computeSha256(destPath);
+        auto destHash = FileUtils::computeSha256(actualDest);
         if (destHash != copyResult.sourceHash) {
             logger.error("Verification failed: SHA-256 mismatch");
             logger.error("  Source hash: " + copyResult.sourceHash);
@@ -202,7 +209,7 @@ int main(int argc, char* argv[]) {
             std::string htmlBody = buildHtmlTemplate(
                 newFileName,
                 renamedPath.value(),
-                destPath,
+                actualDest,
                 backupFile->fileSize
             );
 

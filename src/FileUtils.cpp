@@ -12,6 +12,20 @@ namespace fs = std::filesystem;
 
 static const size_t COPY_BUF_SIZE = 4 * 1024 * 1024;
 
+static std::string generateUniquePath(const std::string& dest) {
+    fs::path p(dest);
+    std::string stem = p.stem().string();
+    std::string ext = p.extension().string();
+    fs::path parent = p.parent_path();
+    for (int i = 1; i <= 999; ++i) {
+        std::ostringstream ss;
+        ss << stem << "_" << std::setw(3) << std::setfill('0') << i << ext;
+        fs::path candidate = parent / ss.str();
+        if (!fs::exists(candidate)) return candidate.string();
+    }
+    return {};
+}
+
 static std::string hashToString(HCRYPTHASH hHash) {
     BYTE hash[32];
     DWORD hashLen = 32;
@@ -132,19 +146,38 @@ static DWORD WINAPI writerThread(LPVOID param) {
     return 0;
 }
 
-CopyResult FileUtils::copyWithHash(const std::string& src, const std::string& dest) {
-    fs::path destPath(dest);
-    fs::create_directories(destPath.parent_path());
+CopyResult FileUtils::copyWithHash(const std::string& src, const std::string& dest, OnExists onExists) {
+    fs::path destFsPath(dest);
+    fs::create_directories(destFsPath.parent_path());
+
+    std::string actualDest = dest;
+    if (fs::exists(dest)) {
+        switch (onExists) {
+            case OnExists::Skip:
+                return {true, "", dest, true};
+            case OnExists::Error:
+                return {false, "", dest, false};
+            case OnExists::Suffix: {
+                auto unique = generateUniquePath(dest);
+                if (unique.empty()) return {false, "", dest, false};
+                actualDest = unique;
+                break;
+            }
+            case OnExists::Overwrite:
+            default:
+                break;
+        }
+    }
 
     HANDLE hSrc = CreateFileA(src.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
         OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
-    if (hSrc == INVALID_HANDLE_VALUE) return {};
+    if (hSrc == INVALID_HANDLE_VALUE) return {false, "", actualDest, false};
 
-    HANDLE hDst = CreateFileA(dest.c_str(), GENERIC_WRITE, 0, nullptr,
+    HANDLE hDst = CreateFileA(actualDest.c_str(), GENERIC_WRITE, 0, nullptr,
         CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (hDst == INVALID_HANDLE_VALUE) {
         CloseHandle(hSrc);
-        return {};
+        return {false, "", actualDest, false};
     }
 
     HCRYPTPROV hProv = 0;
@@ -154,7 +187,7 @@ CopyResult FileUtils::copyWithHash(const std::string& src, const std::string& de
     if (!cryptoOk) {
         CloseHandle(hDst);
         CloseHandle(hSrc);
-        return {};
+        return {false, "", actualDest, false};
     }
 
     char* buffers[2];
@@ -167,7 +200,7 @@ CopyResult FileUtils::copyWithHash(const std::string& src, const std::string& de
         CryptReleaseContext(hProv, 0);
         CloseHandle(hDst);
         CloseHandle(hSrc);
-        return {};
+        return {false, "", actualDest, false};
     }
 
     AsyncContext ctx;
@@ -192,7 +225,7 @@ CopyResult FileUtils::copyWithHash(const std::string& src, const std::string& de
         CryptReleaseContext(hProv, 0);
         CloseHandle(hDst);
         CloseHandle(hSrc);
-        return {};
+        return {false, "", actualDest, false};
     }
 
     bool success = true;
@@ -254,11 +287,11 @@ CopyResult FileUtils::copyWithHash(const std::string& src, const std::string& de
     CloseHandle(hSrc);
 
     if (!success) {
-        DeleteFileA(dest.c_str());
-        return {};
+        DeleteFileA(actualDest.c_str());
+        return {false, "", actualDest, false};
     }
 
-    return {true, hash};
+    return {true, hash, actualDest, false};
 }
 
 std::string FileUtils::computeSha256(const std::string& filePath) {
