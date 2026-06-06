@@ -58,7 +58,7 @@ static std::string readAndFillTemplate(
     double copyDurationSec,
     const std::string& statusJob,
     const std::string& serverName,
-    const std::string& errorMessage = ""
+    const std::string& errorTable = ""
 ) {
     std::ifstream file(templatePath);
     if (!file.is_open()) return {};
@@ -87,7 +87,7 @@ static std::string readAndFillTemplate(
     replaceAll(content, "{STATUSJOB}", statusJob);
     replaceAll(content, "{STATUSCLASS}", statusJob == "Ошибка" ? "error" : "success");
     replaceAll(content, "{SERVERNAME}", serverName);
-    replaceAll(content, "{ERRORMESSAGE}", errorMessage);
+    replaceAll(content, "{ERRORTABLE}", errorTable);
 
     return content;
 }
@@ -256,10 +256,15 @@ int main(int argc, char* argv[]) {
             if (!fs::path(tmplPath).is_absolute())
                 tmplPath = (fs::path(getExecutableDir()) / tmplPath).string();
 
+            std::string errorTable;
+            if (!errorMessage.empty()) {
+                errorTable = "<table class=\"err-box\" cellpadding=\"0\" cellspacing=\"0\"><tr><td>"
+                    + errorMessage + "</td></tr></table>";
+            }
             std::string htmlBody = readAndFillTemplate(
                 tmplPath, newFileName, sourceForMail,
                 actualDest.empty() ? destPath : actualDest,
-                fileSize, label, copyDurationSec, statusJob, config.serverName(), errorMessage
+                fileSize, label, copyDurationSec, statusJob, config.serverName(), errorTable
             );
 
             Mailer mailer;
