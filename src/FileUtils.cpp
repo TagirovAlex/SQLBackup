@@ -85,6 +85,53 @@ std::optional<std::string> FileUtils::renameFile(const std::string& oldPath, con
     return newFsPath.string();
 }
 
+struct AsyncContext {
+    HANDLE hDst;
+    char* buffers[2];
+    DWORD sizes[2];
+    HANDLE hReady;
+    HANDLE hFree[2];
+    volatile bool error;
+};
+
+static DWORD WINAPI writerThread(LPVOID param) {
+    AsyncContext* ctx = static_cast<AsyncContext*>(param);
+
+    while (true) {
+        WaitForSingleObject(ctx->hReady, INFINITE);
+
+        int idx = -1;
+        for (int i = 0; i < 2; ++i) {
+            DWORD s = ctx->sizes[i];
+            if (s != 0 && s != (DWORD)-1) {
+                idx = i;
+                break;
+            }
+        }
+
+        if (idx == -1) {
+            DWORD s0 = ctx->sizes[0];
+            DWORD s1 = ctx->sizes[1];
+            if (s0 == 0 && s1 == 0) break;
+            continue;
+        }
+
+        DWORD size = ctx->sizes[idx];
+        ctx->sizes[idx] = (DWORD)-1;
+
+        DWORD written;
+        if (!WriteFile(ctx->hDst, ctx->buffers[idx], size, &written, nullptr) ||
+            written != size) {
+            ctx->error = true;
+            SetEvent(ctx->hFree[0]);
+            SetEvent(ctx->hFree[1]);
+            break;
+        }
+        SetEvent(ctx->hFree[idx]);
+    }
+    return 0;
+}
+
 CopyResult FileUtils::copyWithHash(const std::string& src, const std::string& dest) {
     fs::path destPath(dest);
     fs::create_directories(destPath.parent_path());
@@ -110,8 +157,37 @@ CopyResult FileUtils::copyWithHash(const std::string& src, const std::string& de
         return {};
     }
 
-    char* buffer = static_cast<char*>(VirtualAlloc(nullptr, COPY_BUF_SIZE, MEM_COMMIT, PAGE_READWRITE));
-    if (!buffer) {
+    char* buffers[2];
+    buffers[0] = static_cast<char*>(VirtualAlloc(nullptr, COPY_BUF_SIZE, MEM_COMMIT, PAGE_READWRITE));
+    buffers[1] = static_cast<char*>(VirtualAlloc(nullptr, COPY_BUF_SIZE, MEM_COMMIT, PAGE_READWRITE));
+    if (!buffers[0] || !buffers[1]) {
+        if (buffers[0]) VirtualFree(buffers[0], 0, MEM_RELEASE);
+        if (buffers[1]) VirtualFree(buffers[1], 0, MEM_RELEASE);
+        CryptDestroyHash(hHash);
+        CryptReleaseContext(hProv, 0);
+        CloseHandle(hDst);
+        CloseHandle(hSrc);
+        return {};
+    }
+
+    AsyncContext ctx;
+    ctx.hDst = hDst;
+    ctx.buffers[0] = buffers[0];
+    ctx.buffers[1] = buffers[1];
+    ctx.sizes[0] = 0;
+    ctx.sizes[1] = 0;
+    ctx.hReady = CreateEventA(nullptr, FALSE, FALSE, nullptr);
+    ctx.hFree[0] = CreateEventA(nullptr, FALSE, TRUE, nullptr);
+    ctx.hFree[1] = CreateEventA(nullptr, FALSE, TRUE, nullptr);
+    ctx.error = false;
+
+    HANDLE hThread = CreateThread(nullptr, 0, writerThread, &ctx, 0, nullptr);
+    if (!hThread) {
+        CloseHandle(ctx.hReady);
+        CloseHandle(ctx.hFree[0]);
+        CloseHandle(ctx.hFree[1]);
+        VirtualFree(buffers[0], 0, MEM_RELEASE);
+        VirtualFree(buffers[1], 0, MEM_RELEASE);
         CryptDestroyHash(hHash);
         CryptReleaseContext(hProv, 0);
         CloseHandle(hDst);
@@ -120,32 +196,57 @@ CopyResult FileUtils::copyWithHash(const std::string& src, const std::string& de
     }
 
     bool success = true;
-    DWORD bytesRead;
+    int cur = 0;
 
-    while (success) {
-        if (!ReadFile(hSrc, buffer, COPY_BUF_SIZE, &bytesRead, nullptr)) {
+    while (true) {
+        WaitForSingleObject(ctx.hFree[cur], INFINITE);
+        if (ctx.error) { success = false; break; }
+
+        DWORD bytesRead;
+        if (!ReadFile(hSrc, buffers[cur], COPY_BUF_SIZE, &bytesRead, nullptr)) {
             success = false;
             break;
         }
         if (bytesRead == 0) break;
 
-        DWORD bytesWritten;
-        if (!WriteFile(hDst, buffer, bytesRead, &bytesWritten, nullptr) || bytesWritten != bytesRead) {
-            success = false;
-            break;
-        }
+        CryptHashData(hHash, reinterpret_cast<BYTE*>(buffers[cur]), bytesRead, 0);
+        ctx.sizes[cur] = bytesRead;
+        SetEvent(ctx.hReady);
 
-        CryptHashData(hHash, reinterpret_cast<BYTE*>(buffer), bytesRead, 0);
+        cur ^= 1;
+
+        if (bytesRead < COPY_BUF_SIZE) break;
     }
 
-    VirtualFree(buffer, 0, MEM_RELEASE);
+    if (success) {
+        WaitForSingleObject(ctx.hFree[cur], INFINITE);
+        if (ctx.error) { success = false; }
+    }
+
+    if (!success || ctx.error) {
+        ctx.sizes[0] = 0;
+        ctx.sizes[1] = 0;
+        SetEvent(ctx.hReady);
+    } else {
+        ctx.sizes[cur] = 0;
+        SetEvent(ctx.hReady);
+    }
+
+    WaitForSingleObject(hThread, INFINITE);
+    CloseHandle(hThread);
+
+    CloseHandle(ctx.hReady);
+    CloseHandle(ctx.hFree[0]);
+    CloseHandle(ctx.hFree[1]);
+
+    VirtualFree(buffers[0], 0, MEM_RELEASE);
+    VirtualFree(buffers[1], 0, MEM_RELEASE);
 
     std::string hash;
     if (success) {
+        FlushFileBuffers(hDst);
         hash = hashToString(hHash);
     }
-
-    FlushFileBuffers(hDst);
 
     CryptDestroyHash(hHash);
     CryptReleaseContext(hProv, 0);
