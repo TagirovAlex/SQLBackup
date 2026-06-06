@@ -193,8 +193,26 @@ bool Mailer::sendMail(
 
     std::string messageId = buildMessageId();
 
+    auto needsEncoding = [](const std::string& s) {
+        for (unsigned char c : s)
+            if (c > 127) return true;
+        return false;
+    };
+
+    auto containsAt = [](const std::string& s) {
+        return s.find('@') != std::string::npos;
+    };
+
     std::ostringstream msg;
-    msg << "From: " << senderName << " <" << senderEmail << ">\r\n";
+    msg << "From: ";
+    if (senderName.empty() || containsAt(senderName) || senderName == senderEmail) {
+        msg << "<" << senderEmail << ">";
+    } else if (needsEncoding(senderName)) {
+        msg << "=?utf-8?B?" << base64Encode(senderName) << "?= <" << senderEmail << ">";
+    } else {
+        msg << senderName << " <" << senderEmail << ">";
+    }
+    msg << "\r\n";
     msg << "To: ";
     for (size_t i = 0; i < recipients.size(); ++i) {
         if (i > 0) msg << ", ";
