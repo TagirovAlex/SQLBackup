@@ -1,4 +1,5 @@
 #include "Config.h"
+#include <windows.h>
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -149,7 +150,22 @@ bool Config::mailAuth() const {
 std::string Config::mailUsername() const { return getValue("Mail", "Username"); }
 std::string Config::mailPassword() const { return getValue("Mail", "Password"); }
 std::string Config::mailTemplatePath() const { return getValue("Mail", "TemplatePath", "mail_template.html"); }
-std::string Config::mailSubject() const { return getValue("Mail", "Subject", "Backup Copy [{LABEL}]: {FILENAME}"); }
+std::string Config::mailSubject() const { return getValue("Mail", "Subject", "[{STATUSJOB}] Backup [{LABEL}] on {SERVERNAME}"); }
+
+std::string Config::serverName() const {
+    auto v = getValue("General", "ServerName", "");
+    if (!v.empty()) return v;
+    wchar_t wbuf[MAX_COMPUTERNAME_LENGTH + 1];
+    DWORD len = MAX_COMPUTERNAME_LENGTH + 1;
+    BOOL ok = GetComputerNameExW(ComputerNameDnsFullyQualified, wbuf, &len);
+    if (!ok) { len = MAX_COMPUTERNAME_LENGTH + 1; ok = GetComputerNameExW(ComputerNameNetBIOS, wbuf, &len); }
+    if (!ok) return "unknown";
+    int size = WideCharToMultiByte(CP_UTF8, 0, wbuf, static_cast<int>(len), nullptr, 0, nullptr, nullptr);
+    if (size <= 0) return "unknown";
+    std::string result(static_cast<size_t>(size), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, wbuf, static_cast<int>(len), &result[0], size, nullptr, nullptr);
+    return result;
+}
 
 std::string Config::logPath() const { return getValue("Log", "LogPath", "logs"); }
 int Config::maxLogs() const {

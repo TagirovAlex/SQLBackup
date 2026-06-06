@@ -56,7 +56,8 @@ static std::string readAndFillTemplate(
     uint64_t fileSize,
     const std::string& label,
     double copyDurationSec,
-    const std::string& statusJob = "Успешно"
+    const std::string& statusJob,
+    const std::string& serverName
 ) {
     std::ifstream file(templatePath);
     if (!file.is_open()) return {};
@@ -84,6 +85,7 @@ static std::string readAndFillTemplate(
     replaceAll(content, "{COPYDURATION}", formatDuration(copyDurationSec));
     replaceAll(content, "{STATUSJOB}", statusJob);
     replaceAll(content, "{STATUSCLASS}", statusJob == "Ошибка" ? "error" : "success");
+    replaceAll(content, "{SERVERNAME}", serverName);
 
     return content;
 }
@@ -249,7 +251,7 @@ int main(int argc, char* argv[]) {
             std::string htmlBody = readAndFillTemplate(
                 tmplPath, newFileName, sourceForMail,
                 actualDest.empty() ? destPath : actualDest,
-                fileSize, label, copyDurationSec, statusJob
+                fileSize, label, copyDurationSec, statusJob, config.serverName()
             );
 
             Mailer mailer;
@@ -274,6 +276,7 @@ int main(int argc, char* argv[]) {
                 }());
                 replaceAll(subject, "{COPYDURATION}", formatDuration(copyDurationSec));
                 replaceAll(subject, "{STATUSJOB}", statusJob);
+                replaceAll(subject, "{SERVERNAME}", config.serverName());
 
                 if (!mailer.sendMail(
                     config.senderName(), config.senderEmail(), recipients,

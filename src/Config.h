@@ -29,6 +29,8 @@ public:
     std::string mailTemplatePath() const;
     std::string mailSubject() const;
 
+    std::string serverName() const;
+
     std::string logPath() const;
     int maxLogs() const;
 

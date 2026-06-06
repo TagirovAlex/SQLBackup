@@ -77,6 +77,7 @@ MaxLogs = 30
 | `FileExtension` | Расширение искомых файлов |
 | `Debug` | Отладочный режим — исходный файл НЕ удаляется |
 | `OnExists` | Поведение при существующем файле назначения: 1 — перезаписать, 2 — ошибка, 3 — суффикс _001/_002..., 4 — пропустить |
+| `ServerName` | Имя сервера для подстановки в письмо ({SERVERNAME}), по умолчанию — FQDN |
 | `Server` | Адрес Exchange / SMTP-сервера |
 | `Port` | SMTP-порт |
 | `SenderName` | Отображаемое имя отправителя |
@@ -121,8 +122,10 @@ SQLBackup.exe --help
 | `{COPYDATE}` | Дата и время копирования |
 | `{COPYDURATION}` | Длительность копирования |
 | `{STATUSJOB}` | Статус выполнения (`Успешно` / `Ошибка`) |
+| `{STATUSCLASS}` | CSS-класс для статуса (`success` / `error`) |
+| `{SERVERNAME}` | Имя сервера (из `ServerName` в конфиге или FQDN) |
 
-Переменные `{LABEL}`, `{FILENAME}`, `{FILESIZE}`, `{COPYDATE}`, `{COPYDURATION}`, `{STATUSJOB}` также поддерживаются в теме письма (`Subject`).
+Переменные `{LABEL}`, `{FILENAME}`, `{FILESIZE}`, `{COPYDATE}`, `{COPYDURATION}`, `{STATUSJOB}`, `{SERVERNAME}` также поддерживаются в теме письма (`Subject`).
 
 ## Логирование
 
