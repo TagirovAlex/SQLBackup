@@ -86,6 +86,7 @@ MaxLogs = 30
 | `Username` | Логин для SMTP |
 | `Password` | Пароль для SMTP |
 | `TemplatePath` | Путь к HTML-шаблону письма (по умолчанию `mail_template.html`) |
+| `Subject` | Тема письма (переменные: `{LABEL}`, `{FILENAME}`, `{FILESIZE}`, `{COPYDATE}`, `{COPYDURATION}`) |
 | `LogPath` | Папка для логов |
 | `MaxLogs` | Максимальное количество хранимых логов |
 
@@ -118,6 +119,9 @@ SQLBackup.exe --help
 | `{SOURCEURL}` | `file:///` URL исходного файла |
 | `{DESTURL}` | `file:///` URL файла назначения |
 | `{COPYDATE}` | Дата и время копирования |
+| `{COPYDURATION}` | Длительность копирования |
+
+Переменные `{LABEL}`, `{FILENAME}`, `{FILESIZE}`, `{COPYDATE}`, `{COPYDURATION}` также поддерживаются в теме письма (`Subject`).
 
 ## Логирование
 

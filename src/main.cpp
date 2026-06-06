@@ -249,7 +249,18 @@ int main(int argc, char* argv[]) {
                 continue;
             }
 
-            std::string subject = "Backup Copy [" + label + "]: " + newFileName;
+            std::string subject = config.mailSubject();
+            replaceAll(subject, "{LABEL}", label);
+            replaceAll(subject, "{FILENAME}", newFileName);
+            replaceAll(subject, "{FILESIZE}", formatFileSize(backupFile->fileSize));
+            replaceAll(subject, "{COPYDATE}", []() {
+                auto now = std::time(nullptr);
+                auto tm = *std::localtime(&now);
+                std::ostringstream ss;
+                ss << std::put_time(&tm, "%d.%m.%Y %H:%M:%S");
+                return ss.str();
+            }());
+            replaceAll(subject, "{COPYDURATION}", formatDuration(copyDurationSec));
             if (!mailer.sendMail(
                 config.senderName(),
                 config.senderEmail(),

@@ -149,6 +149,7 @@ bool Config::mailAuth() const {
 std::string Config::mailUsername() const { return getValue("Mail", "Username"); }
 std::string Config::mailPassword() const { return getValue("Mail", "Password"); }
 std::string Config::mailTemplatePath() const { return getValue("Mail", "TemplatePath", "mail_template.html"); }
+std::string Config::mailSubject() const { return getValue("Mail", "Subject", "Backup Copy [{LABEL}]: {FILENAME}"); }
 
 std::string Config::logPath() const { return getValue("Log", "LogPath", "logs"); }
 int Config::maxLogs() const {
