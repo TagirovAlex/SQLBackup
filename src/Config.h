@@ -8,11 +8,13 @@ public:
     Config() = default;
     bool load(const std::string& path);
 
-    std::string sourcePath() const;
-    std::string destPath() const;
-    std::string nameTemplate() const;
-    std::string dateFormat() const;
-    std::string fileExtension() const;
+    std::vector<std::string> backupSections() const;
+
+    std::string sourcePath(const std::string& section = "") const;
+    std::string destPath(const std::string& section = "") const;
+    std::string nameTemplate(const std::string& section = "") const;
+    std::string dateFormat(const std::string& section = "") const;
+    std::string fileExtension(const std::string& section = "") const;
     bool debug() const;
 
     std::string mailServer() const;

@@ -36,11 +36,20 @@ cmake --build build --config Release
 
 ```ini
 [General]
-SourcePath = C:\Backups\SQL
-DestPath = \\server\share\Backups
 NameTemplate = backup_{date}
 DateFormat = %d.%m.%Y
 FileExtension = .bak
+Debug = false
+
+; Несколько папок — каждая своей секцией [Backup:<имя>]
+[Backup:DB1]
+SourcePath = C:\Backups\DB1
+DestPath = \\server1\share\DB1
+
+[Backup:DB2]
+SourcePath = C:\Backups\DB2
+DestPath = \\server2\share\DB2
+NameTemplate = archive_{date}
 
 [Mail]
 Server = exchange.company.local
@@ -61,8 +70,8 @@ MaxLogs = 30
 
 | Параметр | Описание |
 |---|---|
-| `SourcePath` | Путь к папке с файлами бэкапов |
-| `DestPath` | Путь назначения (локальный или UNC: `\\server\share`) |
+| `SourcePath` | Путь к папке с файлами бэкапов (в `[Backup:*]` или `[General]`) |
+| `DestPath` | Путь назначения, локальный или UNC (в `[Backup:*]` или `[General]`) |
 | `NameTemplate` | Шаблон имени, `{date}` заменяется на дату |
 | `DateFormat` | Формат даты в стиле `strftime` |
 | `FileExtension` | Расширение искомых файлов |
@@ -96,6 +105,22 @@ SQLBackup.exe --help
 ## Логирование
 
 При каждом запуске создаётся файл `SQLBackup_YYYYMMDD_HHMMSS.log` в папке, указанной в `LogPath`. При превышении `MaxLogs` самые старые логи автоматически удаляются.
+
+### Множественные папки бэкапов
+
+Для каждой базы данных создаётся отдельная секция `[Backup:<имя>]`:
+
+```ini
+[Backup:DB1]
+SourcePath = C:\Backups\DB1
+DestPath = \\server1\share\DB1
+
+[Backup:DB2]
+SourcePath = C:\Backups\DB2
+DestPath = \\server2\share\DB2
+```
+
+Параметры `NameTemplate`, `DateFormat`, `FileExtension` наследуются из `[General]`, если не указаны в секции. При отсутствии секций `[Backup:*]` используются `SourcePath` и `DestPath` из `[General]` (обратная совместимость).
 
 ## Алгоритм работы
 

@@ -1,11 +1,8 @@
 ; Файл конфигурации SQLBackup
 ; Разместите как config.ini рядом с исполняемым файлом
 
+; [General] — общие настройки (используются как fallback для Backup-секций)
 [General]
-; Путь к папке с файлами резервных копий
-SourcePath = C:\Backups\SQL
-; Путь назначения (сетевой UNC или локальный путь)
-DestPath = \\server\share\Backups
 ; Шаблон имени файла — {date} заменяется на текущую дату
 NameTemplate = backup_{date}
 ; Формат даты (strftime-совместимый, по умолчанию: %d.%m.%Y)
@@ -14,6 +11,26 @@ DateFormat = %d.%m.%Y
 FileExtension = .bak
 ; Отладочный режим (true/false) — при true исходный файл НЕ удаляется
 Debug = false
+
+; Backup-секции: [Backup:<имя>]
+; Каждая секция — отдельная задача копирования.
+; SourcePath и DestPath обязательны; остальное наследуется из [General].
+[Backup:DB1]
+; Путь к папке с файлами резервных копий
+SourcePath = C:\Backups\DB1
+; Путь назначения (сетевой UNC или локальный путь)
+DestPath = \\server1\share\DB1
+
+[Backup:DB2]
+SourcePath = C:\Backups\DB2
+DestPath = \\server2\share\DB2
+; Можно переопределить шаблон для конкретной секции
+NameTemplate = archive_{date}
+
+; Если Backup-секций нет — используются [General] SourcePath и DestPath
+;[General]
+;SourcePath = C:\Backups\SQL
+;DestPath = \\server\share\Backups
 
 [Mail]
 ; Адрес Exchange сервера (IP или имя хоста)

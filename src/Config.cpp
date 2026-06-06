@@ -52,25 +52,67 @@ bool Config::load(const std::string& path) {
     return true;
 }
 
+static const std::string GENERAL = "General";
+
 std::string Config::getValue(const std::string& section, const std::string& key, const std::string& defaultVal) const {
-    auto secIt = m_data.find(toLower(section));
-    if (secIt == m_data.end()) {
-        secIt = m_data.find(section);
-        if (secIt == m_data.end()) return defaultVal;
+    auto lookup = [&](const std::string& sec) -> std::string {
+        auto secIt = m_data.find(toLower(sec));
+        if (secIt == m_data.end()) secIt = m_data.find(sec);
+        if (secIt != m_data.end()) {
+            auto keyIt = secIt->second.find(toLower(key));
+            if (keyIt == secIt->second.end()) keyIt = secIt->second.find(key);
+            if (keyIt != secIt->second.end()) return keyIt->second;
+        }
+        return {};
+    };
+
+    std::string val = lookup(section);
+    if (!val.empty()) return val;
+
+    if (toLower(section) != toLower(GENERAL)) {
+        val = lookup(GENERAL);
+        if (!val.empty()) return val;
     }
-    auto keyIt = secIt->second.find(toLower(key));
-    if (keyIt == secIt->second.end()) {
-        keyIt = secIt->second.find(key);
-        if (keyIt == secIt->second.end()) return defaultVal;
-    }
-    return keyIt->second;
+
+    return defaultVal;
 }
 
-std::string Config::sourcePath() const { return getValue("General", "SourcePath"); }
-std::string Config::destPath() const { return getValue("General", "DestPath"); }
-std::string Config::nameTemplate() const { return getValue("General", "NameTemplate"); }
-std::string Config::dateFormat() const { return getValue("General", "DateFormat", "%d.%m.%Y"); }
-std::string Config::fileExtension() const { return getValue("General", "FileExtension", ".bak"); }
+std::vector<std::string> Config::backupSections() const {
+    std::vector<std::string> result;
+    for (const auto& pair : m_data) {
+        const std::string& name = pair.first;
+        std::string lower = toLower(name);
+        auto colon = lower.find(':');
+        if (colon != std::string::npos) {
+            std::string prefix = lower.substr(0, colon);
+            if (prefix == "backup") {
+                result.push_back(name);
+            }
+        }
+    }
+    return result;
+}
+
+std::string Config::sourcePath(const std::string& section) const {
+    std::string s = section.empty() ? GENERAL : section;
+    return getValue(s, "SourcePath");
+}
+std::string Config::destPath(const std::string& section) const {
+    std::string s = section.empty() ? GENERAL : section;
+    return getValue(s, "DestPath");
+}
+std::string Config::nameTemplate(const std::string& section) const {
+    std::string s = section.empty() ? GENERAL : section;
+    return getValue(s, "NameTemplate");
+}
+std::string Config::dateFormat(const std::string& section) const {
+    std::string s = section.empty() ? GENERAL : section;
+    return getValue(s, "DateFormat", "%d.%m.%Y");
+}
+std::string Config::fileExtension(const std::string& section) const {
+    std::string s = section.empty() ? GENERAL : section;
+    return getValue(s, "FileExtension", ".bak");
+}
 bool Config::debug() const {
     auto v = getValue("General", "Debug", "false");
     std::string low = toLower(v);

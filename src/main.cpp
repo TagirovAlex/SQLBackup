@@ -120,106 +120,134 @@ int main(int argc, char* argv[]) {
 
     logger.info("Configuration loaded from: " + configPath);
 
-    if (config.sourcePath().empty()) {
-        logger.error("SourcePath is not configured");
-        return 1;
-    }
+    auto sections = config.backupSections();
+    if (sections.empty()) sections.push_back("");
 
-    auto backupFile = FileUtils::findNewestFile(config.sourcePath(), config.fileExtension());
-    if (!backupFile.has_value()) {
-        logger.error("No backup files found in: " + config.sourcePath());
-        return 1;
-    }
+    int successCount = 0;
+    int failCount = 0;
 
-    logger.info("Found backup file: " + backupFile->fileName);
+    for (const auto& section : sections) {
+        std::string label = section.empty() ? "General" : section;
+        logger.info("--- Processing section: " + label + " ---");
 
-    std::string newFileName = FileUtils::generateFileName(config.nameTemplate(), config.dateFormat());
-    std::string ext = fs::path(backupFile->fileName).extension().string();
-    newFileName += ext;
-
-    logger.info("Renaming to: " + newFileName);
-
-    auto renamedPath = FileUtils::renameFile(backupFile->fullPath, newFileName);
-    if (!renamedPath.has_value()) {
-        logger.error("Failed to rename file to: " + newFileName);
-        return 1;
-    }
-
-    logger.info("File renamed to: " + renamedPath.value());
-
-    std::string destPath = (fs::path(config.destPath()) / newFileName).string();
-    logger.info("Copying to: " + destPath + " (with inline SHA-256)");
-
-    auto copyResult = FileUtils::copyWithHash(renamedPath.value(), destPath);
-    if (!copyResult.success) {
-        logger.error("Failed to copy file to: " + destPath);
-        return 1;
-    }
-
-    logger.info("File copied successfully. Verifying destination...");
-
-    auto destHash = FileUtils::computeSha256(destPath);
-    if (destHash != copyResult.sourceHash) {
-        logger.error("Verification failed: SHA-256 mismatch");
-        logger.error("  Source hash: " + copyResult.sourceHash);
-        logger.error("  Dest   hash: " + destHash);
-        return 1;
-    }
-
-    logger.info("Verification passed. Source SHA-256: " + copyResult.sourceHash);
-
-    if (config.debug()) {
-        logger.info("Debug mode: source file will NOT be deleted: " + renamedPath.value());
-    } else {
-        logger.info("Removing source file...");
-        if (!FileUtils::deleteFile(renamedPath.value())) {
-            logger.warn("Failed to remove source file: " + renamedPath.value());
-        } else {
-            logger.info("Source file removed: " + renamedPath.value());
+        std::string srcPath = config.sourcePath(section);
+        if (srcPath.empty()) {
+            logger.error("SourcePath not configured in: " + label);
+            failCount++;
+            continue;
         }
+
+        auto backupFile = FileUtils::findNewestFile(srcPath, config.fileExtension(section));
+        if (!backupFile.has_value()) {
+            logger.error("No backup files found in: " + srcPath);
+            failCount++;
+            continue;
+        }
+
+        logger.info("Found backup file: " + backupFile->fileName);
+
+        std::string newFileName = FileUtils::generateFileName(config.nameTemplate(section), config.dateFormat(section));
+        std::string ext = fs::path(backupFile->fileName).extension().string();
+        newFileName += ext;
+
+        logger.info("Renaming to: " + newFileName);
+
+        auto renamedPath = FileUtils::renameFile(backupFile->fullPath, newFileName);
+        if (!renamedPath.has_value()) {
+            logger.error("Failed to rename file to: " + newFileName);
+            failCount++;
+            continue;
+        }
+
+        logger.info("File renamed to: " + renamedPath.value());
+
+        std::string destPath = (fs::path(config.destPath(section)) / newFileName).string();
+        logger.info("Copying to: " + destPath + " (with inline SHA-256)");
+
+        auto copyResult = FileUtils::copyWithHash(renamedPath.value(), destPath);
+        if (!copyResult.success) {
+            logger.error("Failed to copy file to: " + destPath);
+            failCount++;
+            continue;
+        }
+
+        logger.info("File copied successfully. Verifying destination...");
+
+        auto destHash = FileUtils::computeSha256(destPath);
+        if (destHash != copyResult.sourceHash) {
+            logger.error("Verification failed: SHA-256 mismatch");
+            logger.error("  Source hash: " + copyResult.sourceHash);
+            logger.error("  Dest   hash: " + destHash);
+            failCount++;
+            continue;
+        }
+
+        logger.info("Verification passed. Source SHA-256: " + copyResult.sourceHash);
+
+        if (config.debug()) {
+            logger.info("Debug mode: source file will NOT be deleted: " + renamedPath.value());
+        } else {
+            logger.info("Removing source file...");
+            if (!FileUtils::deleteFile(renamedPath.value())) {
+                logger.warn("Failed to remove source file: " + renamedPath.value());
+            } else {
+                logger.info("Source file removed: " + renamedPath.value());
+            }
+        }
+
+        auto recipients = config.recipients();
+        if (!recipients.empty() && !config.mailServer().empty()) {
+            logger.info("Sending email notification to " + std::to_string(recipients.size()) + " recipient(s)");
+
+            std::string htmlBody = buildHtmlTemplate(
+                newFileName,
+                renamedPath.value(),
+                destPath,
+                backupFile->fileSize
+            );
+
+            Mailer mailer;
+            if (!mailer.connect(config.mailServer(), config.mailPort())) {
+                logger.error("Failed to connect to mail server: " + config.mailServer());
+                failCount++;
+                continue;
+            }
+
+            std::string subject = "Backup Copy [" + label + "]: " + newFileName;
+            if (!mailer.sendMail(
+                config.senderName(),
+                config.senderEmail(),
+                recipients,
+                subject,
+                htmlBody,
+                config.mailAuth(),
+                config.mailUsername(),
+                config.mailPassword()
+            )) {
+                logger.error("Failed to send email notification");
+                failCount++;
+                mailer.disconnect();
+                continue;
+            }
+
+            mailer.disconnect();
+            logger.info("Email notification sent successfully");
+        } else {
+            logger.info("Email notification skipped (no recipients or mail server configured)");
+        }
+
+        successCount++;
     }
 
     logger.cleanupOldLogs();
 
-    auto recipients = config.recipients();
-    if (!recipients.empty() && !config.mailServer().empty()) {
-        logger.info("Sending email notification to " + std::to_string(recipients.size()) + " recipient(s)");
+    logger.info("=== SQLBackup completed: " + std::to_string(successCount) + " succeeded, " +
+                 std::to_string(failCount) + " failed ===");
 
-        std::string htmlBody = buildHtmlTemplate(
-            newFileName,
-            renamedPath.value(),
-            destPath,
-            backupFile->fileSize
-        );
-
-        Mailer mailer;
-        if (!mailer.connect(config.mailServer(), config.mailPort())) {
-            logger.error("Failed to connect to mail server: " + config.mailServer());
-            return 1;
-        }
-
-        std::string subject = "Backup Copy: " + newFileName;
-        if (!mailer.sendMail(
-            config.senderName(),
-            config.senderEmail(),
-            recipients,
-            subject,
-            htmlBody,
-            config.mailAuth(),
-            config.mailUsername(),
-            config.mailPassword()
-        )) {
-            logger.error("Failed to send email notification");
-            mailer.disconnect();
-            return 1;
-        }
-
-        mailer.disconnect();
-        logger.info("Email notification sent successfully");
-    } else {
-        logger.info("Email notification skipped (no recipients or mail server configured)");
+    if (successCount == 0) {
+        logger.error("No backups were processed successfully");
+        return 1;
     }
 
-    logger.info("=== SQLBackup completed successfully ===");
-    return 0;
+    return failCount > 0 ? 1 : 0;
 }
