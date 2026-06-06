@@ -9,6 +9,7 @@
 #include <fstream>
 #include <ctime>
 #include <iomanip>
+#include <chrono>
 
 namespace fs = std::filesystem;
 
@@ -18,6 +19,20 @@ static void replaceAll(std::string& s, const std::string& from, const std::strin
         s.replace(pos, from.length(), to);
         pos += to.length();
     }
+}
+
+static std::string formatDuration(double seconds) {
+    std::ostringstream ss;
+    if (seconds < 1.0)
+        ss << std::fixed << std::setprecision(1) << (seconds * 1000.0) << " мс";
+    else if (seconds < 60.0)
+        ss << std::fixed << std::setprecision(1) << seconds << " сек";
+    else {
+        int mins = static_cast<int>(seconds) / 60;
+        int secs = static_cast<int>(seconds) % 60;
+        ss << mins << " мин " << secs << " сек";
+    }
+    return ss.str();
 }
 
 static std::string formatFileSize(uint64_t fileSize) {
@@ -39,7 +54,8 @@ static std::string readAndFillTemplate(
     const std::string& sourcePath,
     const std::string& destPath,
     uint64_t fileSize,
-    const std::string& label
+    const std::string& label,
+    double copyDurationSec
 ) {
     std::ifstream file(templatePath);
     if (!file.is_open()) return {};
@@ -64,6 +80,7 @@ static std::string readAndFillTemplate(
     replaceAll(content, "{SOURCEURL}", sourceUrl);
     replaceAll(content, "{DESTURL}", destUrl);
     replaceAll(content, "{COPYDATE}", dateStr.str());
+    replaceAll(content, "{COPYDURATION}", formatDuration(copyDurationSec));
 
     return content;
 }
@@ -166,6 +183,7 @@ int main(int argc, char* argv[]) {
         auto onExists = static_cast<OnExists>(config.onExists());
         logger.info("Copying to: " + destPath + " (with inline SHA-256)");
 
+        auto copyStart = std::chrono::steady_clock::now();
         auto copyResult = FileUtils::copyWithHash(renamedPath.value(), destPath, onExists);
         if (copyResult.skipped) {
             logger.warn("Destination file already exists, skipped for: " + copyResult.destPath);
@@ -190,6 +208,8 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
+        auto copyEnd = std::chrono::steady_clock::now();
+        double copyDurationSec = std::chrono::duration<double>(copyEnd - copyStart).count();
         logger.info("Verification passed. Source SHA-256: " + copyResult.sourceHash);
 
         if (config.debug()) {
@@ -213,7 +233,7 @@ int main(int argc, char* argv[]) {
 
             std::string htmlBody = readAndFillTemplate(
                 tmplPath, newFileName, renamedPath.value(),
-                actualDest, backupFile->fileSize, label
+                actualDest, backupFile->fileSize, label, copyDurationSec
             );
 
             if (htmlBody.empty()) {
