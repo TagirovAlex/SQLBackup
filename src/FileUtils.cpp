@@ -279,6 +279,9 @@ CopyResult FileUtils::copyWithHash(const std::string& src, const std::string& de
     if (success) {
         FlushFileBuffers(hDst);
         hash = hashToString(hHash);
+        FILETIME ftCreate, ftAccess, ftWrite;
+        if (GetFileTime(hSrc, &ftCreate, &ftAccess, &ftWrite))
+            SetFileTime(hDst, &ftCreate, &ftAccess, &ftWrite);
     }
 
     CryptDestroyHash(hHash);
