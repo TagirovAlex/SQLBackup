@@ -92,6 +92,8 @@ std::optional<std::string> FileUtils::renameFile(const std::string& oldPath, con
     fs::path newFsPath = parentDir / newName;
 
     if (fs::exists(newFsPath)) {
+        if (fs::equivalent(oldFsPath, newFsPath))
+            return newFsPath.string();
         return std::nullopt;
     }
 
