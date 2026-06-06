@@ -1,0 +1,40 @@
+; Файл конфигурации SQLBackup
+; Разместите как config.ini рядом с исполняемым файлом
+
+[General]
+; Путь к папке с файлами резервных копий
+SourcePath = C:\Backups\SQL
+; Путь назначения (сетевой UNC или локальный путь)
+DestPath = \\server\share\Backups
+; Шаблон имени файла — {date} заменяется на текущую дату
+NameTemplate = backup_{date}
+; Формат даты (strftime-совместимый, по умолчанию: %d.%m.%Y)
+DateFormat = %d.%m.%Y
+; Расширение файлов для поиска (по умолчанию: .bak)
+FileExtension = .bak
+; Отладочный режим (true/false) — при true исходный файл НЕ удаляется
+Debug = false
+
+[Mail]
+; Адрес Exchange сервера (IP или имя хоста)
+Server = exchange.company.local
+; SMTP порт (обычно 25 или 587)
+Port = 25
+; Отображаемое имя отправителя
+SenderName = SQL Backup Service
+; Адрес электронной почты отправителя
+SenderEmail = backup@company.local
+; Получатели (email адреса через запятую)
+Recipients = admin@company.local, dba@company.local
+; Использовать аутентификацию SMTP (true/false)
+Auth = false
+; Имя пользователя SMTP (если Auth = true)
+Username =
+; Пароль SMTP (если Auth = true)
+Password =
+
+[Log]
+; Путь к папке для файлов логов
+LogPath = C:\Logs\SQLBackup
+; Максимальное количество файлов логов (самые старые будут удалены)
+MaxLogs = 30
