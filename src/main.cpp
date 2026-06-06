@@ -148,21 +148,25 @@ int main(int argc, char* argv[]) {
     logger.info("File renamed to: " + renamedPath.value());
 
     std::string destPath = (fs::path(config.destPath()) / newFileName).string();
-    logger.info("Copying to: " + destPath);
+    logger.info("Copying to: " + destPath + " (with inline SHA-256)");
 
-    if (!FileUtils::copyFile(renamedPath.value(), destPath)) {
+    auto copyResult = FileUtils::copyWithHash(renamedPath.value(), destPath);
+    if (!copyResult.success) {
         logger.error("Failed to copy file to: " + destPath);
         return 1;
     }
 
-    logger.info("File copied successfully. Verifying...");
+    logger.info("File copied successfully. Verifying destination...");
 
-    if (!FileUtils::verifyFiles(renamedPath.value(), destPath)) {
-        logger.error("File verification failed! SHA-256 mismatch between source and destination");
+    auto destHash = FileUtils::computeSha256(destPath);
+    if (destHash != copyResult.sourceHash) {
+        logger.error("Verification failed: SHA-256 mismatch");
+        logger.error("  Source hash: " + copyResult.sourceHash);
+        logger.error("  Dest   hash: " + destHash);
         return 1;
     }
 
-    logger.info("File verification passed.");
+    logger.info("Verification passed. Source SHA-256: " + copyResult.sourceHash);
 
     if (config.debug()) {
         logger.info("Debug mode: source file will NOT be deleted: " + renamedPath.value());

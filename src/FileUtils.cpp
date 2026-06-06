@@ -2,7 +2,6 @@
 #include <windows.h>
 #include <wincrypt.h>
 #include <filesystem>
-#include <fstream>
 #include <sstream>
 #include <ctime>
 #include <iomanip>
@@ -10,6 +9,18 @@
 #include <vector>
 
 namespace fs = std::filesystem;
+
+static const size_t COPY_BUF_SIZE = 4 * 1024 * 1024;
+
+static std::string hashToString(HCRYPTHASH hHash) {
+    BYTE hash[32];
+    DWORD hashLen = 32;
+    CryptGetHashParam(hHash, HP_HASHVAL, hash, &hashLen, 0);
+    std::ostringstream ss;
+    for (DWORD i = 0; i < hashLen; ++i)
+        ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
+    return ss.str();
+}
 
 std::optional<BackupFile> FileUtils::findNewestFile(const std::string& directory, const std::string& extension) {
     if (!fs::exists(directory)) return std::nullopt;
@@ -74,68 +85,107 @@ std::optional<std::string> FileUtils::renameFile(const std::string& oldPath, con
     return newFsPath.string();
 }
 
-bool FileUtils::copyFile(const std::string& src, const std::string& dest) {
+CopyResult FileUtils::copyWithHash(const std::string& src, const std::string& dest) {
     fs::path destPath(dest);
     fs::create_directories(destPath.parent_path());
 
-    return CopyFileExA(
-        src.c_str(),
-        dest.c_str(),
-        nullptr,
-        nullptr,
-        nullptr,
-        0
-    ) != 0;
+    HANDLE hSrc = CreateFileA(src.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+        OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    if (hSrc == INVALID_HANDLE_VALUE) return {};
+
+    HANDLE hDst = CreateFileA(dest.c_str(), GENERIC_WRITE, 0, nullptr,
+        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hDst == INVALID_HANDLE_VALUE) {
+        CloseHandle(hSrc);
+        return {};
+    }
+
+    HCRYPTPROV hProv = 0;
+    HCRYPTHASH hHash = 0;
+    bool cryptoOk = CryptAcquireContext(&hProv, nullptr, nullptr, PROV_RSA_AES, CRYPT_VERIFYCONTEXT) &&
+                    CryptCreateHash(hProv, CALG_SHA_256, 0, 0, &hHash);
+    if (!cryptoOk) {
+        CloseHandle(hDst);
+        CloseHandle(hSrc);
+        return {};
+    }
+
+    char* buffer = static_cast<char*>(VirtualAlloc(nullptr, COPY_BUF_SIZE, MEM_COMMIT, PAGE_READWRITE));
+    if (!buffer) {
+        CryptDestroyHash(hHash);
+        CryptReleaseContext(hProv, 0);
+        CloseHandle(hDst);
+        CloseHandle(hSrc);
+        return {};
+    }
+
+    bool success = true;
+    DWORD bytesRead;
+
+    while (success) {
+        if (!ReadFile(hSrc, buffer, COPY_BUF_SIZE, &bytesRead, nullptr)) {
+            success = false;
+            break;
+        }
+        if (bytesRead == 0) break;
+
+        DWORD bytesWritten;
+        if (!WriteFile(hDst, buffer, bytesRead, &bytesWritten, nullptr) || bytesWritten != bytesRead) {
+            success = false;
+            break;
+        }
+
+        CryptHashData(hHash, reinterpret_cast<BYTE*>(buffer), bytesRead, 0);
+    }
+
+    VirtualFree(buffer, 0, MEM_RELEASE);
+
+    std::string hash;
+    if (success) {
+        hash = hashToString(hHash);
+    }
+
+    FlushFileBuffers(hDst);
+
+    CryptDestroyHash(hHash);
+    CryptReleaseContext(hProv, 0);
+    CloseHandle(hDst);
+    CloseHandle(hSrc);
+
+    if (!success) {
+        DeleteFileA(dest.c_str());
+        return {};
+    }
+
+    return {true, hash};
 }
 
 std::string FileUtils::computeSha256(const std::string& filePath) {
+    HANDLE hFile = CreateFileA(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+        OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) return "";
+
     HCRYPTPROV hProv = 0;
     HCRYPTHASH hHash = 0;
-
-    if (!CryptAcquireContext(&hProv, nullptr, nullptr, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) {
-        return "";
-    }
-
-    if (!CryptCreateHash(hProv, CALG_SHA_256, 0, 0, &hHash)) {
-        CryptReleaseContext(hProv, 0);
-        return "";
-    }
-
-    std::ifstream file(filePath, std::ios::binary);
-    if (!file.is_open()) {
-        CryptDestroyHash(hHash);
-        CryptReleaseContext(hProv, 0);
+    if (!CryptAcquireContext(&hProv, nullptr, nullptr, PROV_RSA_AES, CRYPT_VERIFYCONTEXT) ||
+        !CryptCreateHash(hProv, CALG_SHA_256, 0, 0, &hHash)) {
+        if (hProv) CryptReleaseContext(hProv, 0);
+        CloseHandle(hFile);
         return "";
     }
 
     char buffer[65536];
-    while (file.read(buffer, sizeof(buffer)) || file.gcount() > 0) {
-        CryptHashData(hHash, reinterpret_cast<BYTE*>(buffer), static_cast<DWORD>(file.gcount()), 0);
+    DWORD bytesRead;
+    while (ReadFile(hFile, buffer, sizeof(buffer), &bytesRead, nullptr) && bytesRead > 0) {
+        CryptHashData(hHash, reinterpret_cast<BYTE*>(buffer), bytesRead, 0);
     }
-    file.close();
 
-    BYTE hash[32];
-    DWORD hashLen = 32;
-    CryptGetHashParam(hHash, HP_HASHVAL, hash, &hashLen, 0);
+    std::string hash = hashToString(hHash);
 
     CryptDestroyHash(hHash);
     CryptReleaseContext(hProv, 0);
-
-    std::ostringstream ss;
-    for (DWORD i = 0; i < hashLen; ++i) {
-        ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
-    }
-    return ss.str();
-}
-
-bool FileUtils::verifyFiles(const std::string& file1, const std::string& file2) {
-    auto hash1 = computeSha256(file1);
-    if (hash1.empty()) return false;
-
-    auto hash2 = computeSha256(file2);
-    if (hash2.empty()) return false;
-
-    return hash1 == hash2;
+    CloseHandle(hFile);
+    return hash;
 }
 
 bool FileUtils::deleteFile(const std::string& path) {

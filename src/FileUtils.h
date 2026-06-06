@@ -18,13 +18,17 @@ struct BackupResult {
     bool success = false;
 };
 
+struct CopyResult {
+    bool success = false;
+    std::string sourceHash;
+};
+
 class FileUtils {
 public:
     static std::optional<BackupFile> findNewestFile(const std::string& directory, const std::string& extension);
     static std::string generateFileName(const std::string& nameTemplate, const std::string& dateFormat);
     static std::optional<std::string> renameFile(const std::string& oldPath, const std::string& newName);
-    static bool copyFile(const std::string& src, const std::string& dest);
-    static bool verifyFiles(const std::string& file1, const std::string& file2);
+    static CopyResult copyWithHash(const std::string& src, const std::string& dest);
     static bool deleteFile(const std::string& path);
     static std::string computeSha256(const std::string& filePath);
 };
