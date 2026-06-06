@@ -6,65 +6,66 @@
 #include <filesystem>
 #include <iostream>
 #include <sstream>
+#include <fstream>
 #include <ctime>
 #include <iomanip>
 
 namespace fs = std::filesystem;
 
-static std::string buildHtmlTemplate(
+static void replaceAll(std::string& s, const std::string& from, const std::string& to) {
+    size_t pos = 0;
+    while ((pos = s.find(from, pos)) != std::string::npos) {
+        s.replace(pos, from.length(), to);
+        pos += to.length();
+    }
+}
+
+static std::string formatFileSize(uint64_t fileSize) {
+    std::ostringstream ss;
+    if (fileSize > 1073741824)
+        ss << std::fixed << std::setprecision(2) << (static_cast<double>(fileSize) / 1073741824.0) << " ГБ";
+    else if (fileSize > 1048576)
+        ss << std::fixed << std::setprecision(2) << (static_cast<double>(fileSize) / 1048576.0) << " МБ";
+    else if (fileSize > 1024)
+        ss << std::fixed << std::setprecision(2) << (static_cast<double>(fileSize) / 1024.0) << " КБ";
+    else
+        ss << fileSize << " Б";
+    return ss.str();
+}
+
+static std::string readAndFillTemplate(
+    const std::string& templatePath,
     const std::string& filename,
     const std::string& sourcePath,
     const std::string& destPath,
-    uint64_t fileSize
+    uint64_t fileSize,
+    const std::string& label
 ) {
+    std::ifstream file(templatePath);
+    if (!file.is_open()) return {};
+
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+
     auto now = std::time(nullptr);
     auto tm = *std::localtime(&now);
     std::ostringstream dateStr;
     dateStr << std::put_time(&tm, "%d.%m.%Y %H:%M:%S");
-
-    std::ostringstream sizeStr;
-    if (fileSize > 1073741824) {
-        sizeStr << std::fixed << std::setprecision(2) << (static_cast<double>(fileSize) / 1073741824.0) << " GB";
-    } else if (fileSize > 1048576) {
-        sizeStr << std::fixed << std::setprecision(2) << (static_cast<double>(fileSize) / 1048576.0) << " MB";
-    } else if (fileSize > 1024) {
-        sizeStr << std::fixed << std::setprecision(2) << (static_cast<double>(fileSize) / 1024.0) << " KB";
-    } else {
-        sizeStr << fileSize << " B";
-    }
 
     std::string sourceUrl = "file:///" + sourcePath;
     std::string destUrl = "file:///" + destPath;
     std::replace(sourceUrl.begin(), sourceUrl.end(), '\\', '/');
     std::replace(destUrl.begin(), destUrl.end(), '\\', '/');
 
-    std::ostringstream html;
-    html << "<!DOCTYPE html>\n"
-         << "<html>\n<head>\n"
-         << "<meta charset=\"utf-8\">\n"
-         << "<style>\n"
-         << "body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; padding: 20px; }\n"
-         << "table { border-collapse: collapse; margin: 15px 0; }\n"
-         << "td, th { padding: 8px 12px; border: 1px solid #ddd; text-align: left; }\n"
-         << "th { background-color: #f5f5f5; font-weight: 600; }\n"
-         << ".success { color: #28a745; font-weight: bold; }\n"
-         << "a { color: #007bff; text-decoration: none; }\n"
-         << "a:hover { text-decoration: underline; }\n"
-         << "</style>\n</head>\n<body>\n"
-         << "<h2>Backup Copy Report</h2>\n"
-         << "<p class=\"success\">&#10004; Backup file successfully processed</p>\n"
-         << "<table>\n"
-         << "<tr><th>Parameter</th><th>Value</th></tr>\n"
-         << "<tr><td>File Name</td><td><b>" << filename << "</b></td></tr>\n"
-         << "<tr><td>File Size</td><td>" << sizeStr.str() << "</td></tr>\n"
-         << "<tr><td>Source Path</td><td><a href=\"" << sourceUrl << "\">" << sourcePath << "</a></td></tr>\n"
-         << "<tr><td>Destination Path</td><td><a href=\"" << destUrl << "\">" << destPath << "</a></td></tr>\n"
-         << "<tr><td>Copy Date</td><td>" << dateStr.str() << "</td></tr>\n"
-         << "</table>\n"
-         << "<p>This is an automated message from SQL Backup Utility.</p>\n"
-         << "</body>\n</html>";
+    replaceAll(content, "{LABEL}", label);
+    replaceAll(content, "{FILENAME}", filename);
+    replaceAll(content, "{FILESIZE}", formatFileSize(fileSize));
+    replaceAll(content, "{SOURCEPATH}", sourcePath);
+    replaceAll(content, "{DESTPATH}", destPath);
+    replaceAll(content, "{SOURCEURL}", sourceUrl);
+    replaceAll(content, "{DESTURL}", destUrl);
+    replaceAll(content, "{COPYDATE}", dateStr.str());
 
-    return html.str();
+    return content;
 }
 
 static std::string getExecutableDir() {
@@ -206,12 +207,20 @@ int main(int argc, char* argv[]) {
         if (!recipients.empty() && !config.mailServer().empty()) {
             logger.info("Sending email notification to " + std::to_string(recipients.size()) + " recipient(s)");
 
-            std::string htmlBody = buildHtmlTemplate(
-                newFileName,
-                renamedPath.value(),
-                actualDest,
-                backupFile->fileSize
+            std::string tmplPath = config.mailTemplatePath();
+            if (!fs::path(tmplPath).is_absolute())
+                tmplPath = (fs::path(getExecutableDir()) / tmplPath).string();
+
+            std::string htmlBody = readAndFillTemplate(
+                tmplPath, newFileName, renamedPath.value(),
+                actualDest, backupFile->fileSize, label
             );
+
+            if (htmlBody.empty()) {
+                logger.error("Failed to read mail template: " + tmplPath);
+                failCount++;
+                continue;
+            }
 
             Mailer mailer;
             if (!mailer.connect(config.mailServer(), config.mailPort())) {

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; padding: 20px; }
+table { border-collapse: collapse; margin: 15px 0; }
+td, th { padding: 8px 12px; border: 1px solid #ddd; text-align: left; }
+th { background-color: #f5f5f5; font-weight: 600; }
+.success { color: #28a745; font-weight: bold; }
+a { color: #007bff; text-decoration: none; }
+a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<h2>Отчёт о копировании резервной копии</h2>
+<p class="success">&#10004; Файл резервной копии успешно обработан</p>
+<table>
+<tr><th>Параметр</th><th>Значение</th></tr>
+<tr><td>Раздел</td><td><b>{LABEL}</b></td></tr>
+<tr><td>Имя файла</td><td><b>{FILENAME}</b></td></tr>
+<tr><td>Размер файла</td><td>{FILESIZE}</td></tr>
+<tr><td>Исходный путь</td><td><a href="{SOURCEURL}">{SOURCEPATH}</a></td></tr>
+<tr><td>Путь назначения</td><td><a href="{DESTURL}">{DESTPATH}</a></td></tr>
+<tr><td>Дата копирования</td><td>{COPYDATE}</td></tr>
+</table>
+<p>Данное сообщение сгенерировано автоматически утилитой SQL Backup Utility.</p>
+</body>
+</html>

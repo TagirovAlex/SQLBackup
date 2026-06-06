@@ -26,6 +26,7 @@ public:
     bool mailAuth() const;
     std::string mailUsername() const;
     std::string mailPassword() const;
+    std::string mailTemplatePath() const;
 
     std::string logPath() const;
     int maxLogs() const;

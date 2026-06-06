@@ -57,6 +57,9 @@ Auth = false
 Username =
 ; Пароль SMTP (если Auth = true)
 Password =
+; Путь к файлу шаблона письма (HTML с переменными {LABEL}, {FILENAME},
+; {FILESIZE}, {SOURCEPATH}, {DESTPATH}, {SOURCEURL}, {DESTURL}, {COPYDATE})
+TemplatePath = mail_template.html
 
 [Log]
 ; Путь к папке для файлов логов
