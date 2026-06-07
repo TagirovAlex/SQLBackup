@@ -119,6 +119,11 @@ bool Config::debug() const {
     std::string low = toLower(v);
     return low == "true" || low == "yes" || low == "1";
 }
+bool Config::keepSource() const {
+    auto v = getValue("General", "KeepSource", "false");
+    std::string low = toLower(v);
+    return low == "true" || low == "yes" || low == "1";
+}
 int Config::onExists() const {
     auto v = getValue("General", "OnExists", "1");
     return std::max(1, std::min(4, std::stoi(v)));

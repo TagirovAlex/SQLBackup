@@ -256,8 +256,8 @@ int main(int argc, char* argv[]) {
 
                     destFreeAfter = getDiskFree(destPath);
 
-                    if (config.debug()) {
-                        logger.info("Debug mode: source file will NOT be deleted: " + renamedPath);
+                    if (config.keepSource()) {
+                        logger.info("KeepSource enabled: source file retained: " + renamedPath);
                     } else {
                         logger.info("Removing source file...");
                         if (!FileUtils::deleteFile(renamedPath)) {
