@@ -50,11 +50,8 @@ static std::string formatFileSize(uint64_t fileSize) {
 
 static std::string getDiskFree(const std::string& path) {
     if (path.empty()) return {};
-    fs::path p(path);
-    std::string root = p.root_path().string();
-    if (root.empty()) return {};
     ULARGE_INTEGER free;
-    if (!GetDiskFreeSpaceExA(root.c_str(), &free, nullptr, nullptr))
+    if (!GetDiskFreeSpaceExA(path.c_str(), &free, nullptr, nullptr))
         return {};
     return formatFileSize(free.QuadPart);
 }
@@ -278,6 +275,8 @@ int main(int argc, char* argv[]) {
         if (destFreeAfter.empty()) destFreeAfter = destFreeBefore;
 
         std::string sourceForMail = renamedPath.empty() ? (backupFile ? backupFile->fullPath : "") : renamedPath;
+        if (sourceForMail.empty()) sourceForMail = srcPath;
+        if (destPath.empty()) destPath = destDir;
         std::string statusJob = sectionOk ? "Успешно" : "Ошибка";
 
         auto recipients = config.recipients();
