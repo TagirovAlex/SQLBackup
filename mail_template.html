@@ -44,13 +44,14 @@ h2 {
     width: 100%;
 }
 .data-table td, .data-table th {
-    padding: 7px 10px;
+    padding: 4px 8px;
     border: 1px solid #ddd;
     text-align: left;
     vertical-align: top;
     word-wrap: break-word;
     overflow-wrap: break-word;
     word-break: break-word;
+    font-size: 12px;
 }
 .data-table th {
     background-color: #f5f5f5;
@@ -74,7 +75,7 @@ a:hover { text-decoration: underline; }
 <p class="status {STATUSCLASS}">{STATUSJOB}</p>
 {ERRORTABLE}
 <br>
-<br>
+
 <table class="data-table" cellpadding="0" cellspacing="0">
 <tr><th>Сервер</th><td>{SERVERNAME}</td></tr>
 <tr><th>Раздел</th><td><b>{LABEL}</b></td></tr>
@@ -84,6 +85,10 @@ a:hover { text-decoration: underline; }
 <tr><th>Путь назначения</th><td><a href="{DESTURL}">{DESTPATH}</a></td></tr>
 <tr><th>Дата копирования</th><td>{COPYDATE}</td></tr>
 <tr><th>Время копирования</th><td>{COPYDURATION}</td></tr>
+<tr><th>Свободно на источнике до</th><td>{SRCFREEBEFORE}</td></tr>
+<tr><th>Свободно на источнике после</th><td>{SRCFREEAFTER}</td></tr>
+<tr><th>Свободно на приёмнике до</th><td>{DESTFREEBEFORE}</td></tr>
+<tr><th>Свободно на приёмнике после</th><td>{DESTFREEAFTER}</td></tr>
 </table>
 <p class="footer">Данное сообщение сгенерировано автоматически утилитой SQL Backup Utility</p>
 </td></tr>

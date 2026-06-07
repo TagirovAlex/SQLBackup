@@ -48,6 +48,17 @@ static std::string formatFileSize(uint64_t fileSize) {
     return ss.str();
 }
 
+static std::string getDiskFree(const std::string& path) {
+    if (path.empty()) return {};
+    fs::path p(path);
+    std::string root = p.root_path().string();
+    if (root.empty()) return {};
+    ULARGE_INTEGER free;
+    if (!GetDiskFreeSpaceExA(root.c_str(), &free, nullptr, nullptr))
+        return {};
+    return formatFileSize(free.QuadPart);
+}
+
 static std::string readAndFillTemplate(
     const std::string& templatePath,
     const std::string& filename,
@@ -58,7 +69,11 @@ static std::string readAndFillTemplate(
     double copyDurationSec,
     const std::string& statusJob,
     const std::string& serverName,
-    const std::string& errorTable = ""
+    const std::string& errorTable = "",
+    const std::string& srcFreeBefore = "",
+    const std::string& srcFreeAfter = "",
+    const std::string& destFreeBefore = "",
+    const std::string& destFreeAfter = ""
 ) {
     std::ifstream file(templatePath);
     if (!file.is_open()) return {};
@@ -88,6 +103,10 @@ static std::string readAndFillTemplate(
     replaceAll(content, "{STATUSCLASS}", statusJob == "Ошибка" ? "error" : "success");
     replaceAll(content, "{SERVERNAME}", serverName);
     replaceAll(content, "{ERRORTABLE}", errorTable);
+    replaceAll(content, "{SRCFREEBEFORE}", srcFreeBefore);
+    replaceAll(content, "{SRCFREEAFTER}", srcFreeAfter);
+    replaceAll(content, "{DESTFREEBEFORE}", destFreeBefore);
+    replaceAll(content, "{DESTFREEAFTER}", destFreeAfter);
 
     return content;
 }
@@ -163,12 +182,19 @@ int main(int argc, char* argv[]) {
         std::string destPath;
         uint64_t fileSize = 0;
         double copyDurationSec = 0;
+        std::string srcFreeBefore, srcFreeAfter, destFreeBefore, destFreeAfter;
 
         std::string srcPath = config.sourcePath(section);
+        std::string destDir = config.destPath(section);
         if (srcPath.empty()) {
             errorMessage = "Не указан путь к исходной папке (SourcePath)";
             logger.error(errorMessage);
             sectionOk = false;
+        } else {
+            srcFreeBefore = getDiskFree(srcPath);
+        }
+        if (!destDir.empty()) {
+            destFreeBefore = getDiskFree(destDir);
         }
 
         std::optional<BackupFile> backupFile;
@@ -202,7 +228,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (sectionOk) {
-            destPath = (fs::path(config.destPath(section)) / newFileName).string();
+            destPath = (fs::path(destDir) / newFileName).string();
             auto onExists = static_cast<OnExists>(config.onExists());
             logger.info("Copying to: " + destPath + " (with inline SHA-256)");
 
@@ -231,6 +257,8 @@ int main(int argc, char* argv[]) {
                     copyDurationSec = std::chrono::duration<double>(std::chrono::steady_clock::now() - copyStart).count();
                     logger.info("Verification passed. Source SHA-256: " + copyResult.sourceHash);
 
+                    destFreeAfter = getDiskFree(destPath);
+
                     if (config.debug()) {
                         logger.info("Debug mode: source file will NOT be deleted: " + renamedPath);
                     } else {
@@ -239,11 +267,15 @@ int main(int argc, char* argv[]) {
                             logger.warn("Failed to remove source file: " + renamedPath);
                         } else {
                             logger.info("Source file removed: " + renamedPath);
+                            srcFreeAfter = getDiskFree(srcPath);
                         }
                     }
                 }
             }
         }
+
+        if (srcFreeAfter.empty()) srcFreeAfter = srcFreeBefore;
+        if (destFreeAfter.empty()) destFreeAfter = destFreeBefore;
 
         std::string sourceForMail = renamedPath.empty() ? (backupFile ? backupFile->fullPath : "") : renamedPath;
         std::string statusJob = sectionOk ? "Успешно" : "Ошибка";
@@ -264,7 +296,8 @@ int main(int argc, char* argv[]) {
             std::string htmlBody = readAndFillTemplate(
                 tmplPath, newFileName, sourceForMail,
                 actualDest.empty() ? destPath : actualDest,
-                fileSize, label, copyDurationSec, statusJob, config.serverName(), errorTable
+                fileSize, label, copyDurationSec, statusJob, config.serverName(), errorTable,
+                srcFreeBefore, srcFreeAfter, destFreeBefore, destFreeAfter
             );
 
             Mailer mailer;
@@ -291,6 +324,10 @@ int main(int argc, char* argv[]) {
                 replaceAll(subject, "{STATUSJOB}", statusJob);
                 replaceAll(subject, "{SERVERNAME}", config.serverName());
                 replaceAll(subject, "{ERRORMESSAGE}", errorMessage);
+                replaceAll(subject, "{SRCFREEBEFORE}", srcFreeBefore);
+                replaceAll(subject, "{SRCFREEAFTER}", srcFreeAfter);
+                replaceAll(subject, "{DESTFREEBEFORE}", destFreeBefore);
+                replaceAll(subject, "{DESTFREEAFTER}", destFreeAfter);
 
                 if (!mailer.sendMail(
                     config.senderName(), config.senderEmail(), recipients,

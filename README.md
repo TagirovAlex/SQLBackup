@@ -143,8 +143,12 @@ MaxLogs = 30
 | `{COPYDURATION}` | Длительность копирования + верификации |
 | `{ERRORTABLE}` | HTML-таблица с описанием ошибки (пусто при успехе) |
 | `{ERRORMESSAGE}` | Текст ошибки для подстановки в тему письма (пусто при успехе) |
+| `{SRCFREEBEFORE}` | Свободное место на диске источника до начала операции |
+| `{SRCFREEAFTER}` | Свободное место на диске источника после удаления файла |
+| `{DESTFREEBEFORE}` | Свободное место на диске приёмника до копирования |
+| `{DESTFREEAFTER}` | Свободное место на диске приёмника после копирования |
 
-Переменные `{STATUSJOB}`, `{STATUSCLASS}`, `{SERVERNAME}`, `{LABEL}`, `{FILENAME}`, `{FILESIZE}`, `{COPYDATE}`, `{COPYDURATION}`, `{ERRORMESSAGE}` поддерживаются как в теле, так и в теме письма (`Subject`).
+Переменные `{STATUSJOB}`, `{STATUSCLASS}`, `{SERVERNAME}`, `{LABEL}`, `{FILENAME}`, `{FILESIZE}`, `{COPYDATE}`, `{COPYDURATION}`, `{ERRORMESSAGE}`, `{SRCFREEBEFORE}`, `{SRCFREEAFTER}`, `{DESTFREEBEFORE}`, `{DESTFREEAFTER}` поддерживаются как в теле, так и в теме письма (`Subject`).
 
 ### Outlook
 
